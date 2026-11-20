@@ -18,6 +18,15 @@ def update_assignments(data, centroids):
     data has shape (n, d); centroids has shape (k, d).
     The result should be an integer array with shape (n,).
     Resolve equal-distance ties consistently and document your rule.
+
+    Args:
+        data: float array of shape (n, d), one point per row.
+        centroids: float array of shape (k, d), one centroid per row.
+
+    Returns:
+        Integer array of shape (n,) where entry i is the index (0..k-1) of
+        the centroid closest to data[i] in squared Euclidean distance.
+        Ties go to the lowest centroid index.
     """
     # Compute distances and assign each point to a centroid.
     # Squared Euclidean distances, shape (n, k), via broadcasting.
@@ -32,19 +41,48 @@ def update_centroids(data, centroids, assignments):
 
     Document how you handle an empty cluster. One valid choice is to retain
     its previous centroid. Avoid modifying the input centroid array in place.
+
+    Empty-cluster policy: a cluster that receives no points keeps its previous
+    centroid unchanged. This avoids taking the mean of an empty set (NaN) and
+    lets the cluster pick up points again in a later iteration.
+
+    Args:
+        data: float array of shape (n, d), one point per row.
+        centroids: float array of shape (k, d) with the current centroids.
+            It is not modified.
+        assignments: integer array of shape (n,) with values in 0..k-1, as
+            returned by update_assignments.
+
+    Returns:
+        A new float array of shape (k, d). Row j is the mean of the points
+        assigned to cluster j, or the previous centroid j if that cluster
+        is empty.
     """
+    # Start from a copy so empty clusters keep their old centroid and the
+    # caller's array is never modified in place.
     new_centroids = np.array(centroids, dtype=float, copy=True)
     for j in range(centroids.shape[0]):
         members = data[assignments == j]
-        # Update the centroid of each nonempty cluster.
-        # Nonempty cluster: move the centroid to the mean of its points.
         if members.shape[0] > 0:
+            # Nonempty cluster: move the centroid to the mean of its points.
             new_centroids[j] = members.mean(axis=0)
+        # Empty cluster: nothing to do, new_centroids[j] already holds the
+        # previous centroid (see the empty-cluster policy above).
     return new_centroids
 
 
 def kmeans(data, centroids, max_iterations=100):
-    """Assignment 4's provided alternating-update loop, with a final assignment."""
+    """Assignment 4's provided alternating-update loop, with a final assignment.
+
+    Args:
+        data: float array of shape (n, d).
+        centroids: initial centroids, float array of shape (k, d).
+        max_iterations: number of assignment/update rounds to run.
+
+    Returns:
+        (centroids, assignments): final (k, d) centroids and the (n,)
+        cluster index of each point under those centroids.
+    """
     for _ in range(max_iterations):
         assignments = update_assignments(data, centroids)
         centroids = update_centroids(data, centroids, assignments)
@@ -78,8 +116,17 @@ def run_experiments(output_dir, seed=0, max_iterations=100):
     # Load toy data, create a seeded RNG, and initialize centroids.
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    data = make_toy_data()
+    # make_blobs returns (features, labels); the labels are only plotted.
+    data, true_labels = make_toy_data()
     rng = np.random.default_rng(seed)
+
+    # Reference plot of the true blob labels (never used for clustering).
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.scatter(data[:, 0], data[:, 1], c=true_labels, cmap="tab10", s=5)
+    ax.set(title="True blob labels (reference only)", xlabel="x1", ylabel="x2")
+    fig.tight_layout()
+    fig.savefig(output_dir / "reference_true_labels.png", dpi=150)
+    plt.close(fig)
 
     # Run kmeans for every value in K_VALUES.
     saved = []
